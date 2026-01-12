@@ -6,7 +6,7 @@ A research-grade, kernel-near Linux performance exploration tool that demonstrat
 
 ---
 
-## ⚡ Quick Start (< 2 minutes)
+## Quick Start (< 2 minutes)
 
 ```bash
 # One-time setup (builds everything, ~30 seconds)
@@ -18,22 +18,19 @@ A research-grade, kernel-near Linux performance exploration tool that demonstrat
 # Results displayed automatically!
 ```
 
-**🎉 That's it! You now have performance data.**
+**That's it! You now have performance data.**
 
 ---
 
-## 🆕 What's New in v2.0
+## What's New in v2.0
 
-- **✅ Interrupt Safety** - Ctrl+C cleanly exits, no stray processes
-- **✅ Progress Indicators** - Spinners and progress bars
-- **✅ Enhanced Error Handling** - Clear messages with suggestions
-- **✅ Overwrite Protection** - Warns before overwriting results
-- **✅ Time Estimates** - Shows duration for each experiment
-- **✅ Recent Results** - Displays recently run experiments
-- **✅ New Commands** - `version`, `clean`, `--no-color`
-- **✅ 45+ UX Improvements** - See [UX_IMPROVEMENTS.md](UX_IMPROVEMENTS.md)
-
-**Full v2.0 release notes:** [V2_RELEASE_NOTES.md](V2_RELEASE_NOTES.md)
+- **Interrupt Safety** - Ctrl+C cleanly exits, no stray processes
+- **Progress Indicators** - Spinners and progress bars
+- **Enhanced Error Handling** - Clear messages with suggestions
+- **Overwrite Protection** - Warns before overwriting results
+- **Time Estimates** - Shows duration for each experiment
+- ** Recent Results** - Displays recently run experiments
+- **New Commands** - `version`, `clean`, `--no-color`
 
 ---
 
@@ -44,10 +41,9 @@ A research-grade, kernel-near Linux performance exploration tool that demonstrat
 | **[QUICKSTART.md](QUICKSTART.md)** | Beginners | 5 min | Installation & first experiments |
 | **[USER_GUIDE.md](USER_GUIDE.md)** | All users | 20 min | Complete reference |
 | **[DEPLOYMENT.md](DEPLOYMENT.md)** | Ops/admins | 15 min | Workflows & integration |
-| **[VISUAL_OVERVIEW.md](VISUAL_OVERVIEW.md)** | All users | 5 min | Visual project map |
 | **[DEMO.md](DEMO.md)** | Presenters | 2 min | Demo script |
 
-**👉 New user? Start with [QUICKSTART.md](QUICKSTART.md)**
+**New user? Start with [QUICKSTART.md](QUICKSTART.md)**
 
 ---
 
