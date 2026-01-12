@@ -34,7 +34,7 @@ A research-grade, kernel-near Linux performance exploration tool that demonstrat
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 | Document | Audience | Time | Purpose |
 |----------|----------|------|---------|
@@ -47,7 +47,7 @@ A research-grade, kernel-near Linux performance exploration tool that demonstrat
 
 ---
 
-## 🎮 Usage Modes
+## Usage Modes
 
 ### Interactive (Beginner-Friendly)
 ```bash
