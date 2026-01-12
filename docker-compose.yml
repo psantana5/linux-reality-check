@@ -1,0 +1,28 @@
+# Docker Compose for LRC testing
+
+version: '3.8'
+
+services:
+  lrc:
+    build: .
+    container_name: lrc-testing
+    privileged: true  # Required for perf counters
+    volumes:
+      - ./data:/lrc/data
+    command: >
+      bash -c "
+        echo 'Running LRC experiments in container...' &&
+        cd scenarios &&
+        ./run_experiment.sh pinned &&
+        echo 'Results in /lrc/data/'
+      "
+
+  lrc-interactive:
+    build: .
+    container_name: lrc-interactive
+    privileged: true
+    volumes:
+      - ./data:/lrc/data
+    stdin_open: true
+    tty: true
+    command: /bin/bash

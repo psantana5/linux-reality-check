@@ -1,0 +1,24 @@
+{
+  "experiment": {
+    "name": "test_experiment",
+    "timestamp": "2026-01-09T14:11:30.994939",
+    "iterations": null,
+    "runs": null
+  },
+  "system": {
+    "kernel": "6.14.0-37-generic",
+    "kernel_full": "Linux depa 6.14.0-37-generic #37~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 10:25:38 UTC 2 x86_64 x86_64 x86_64 GNU/Linux",
+    "cpu_model": "Intel(R) Core(TM) Ultra 5 235U",
+    "cpu_count": 14,
+    "cpu_governor": "powersave",
+    "load_avg": {
+      "1min": 0.3,
+      "5min": 0.54,
+      "15min": 0.93
+    },
+    "memory_total_kb": "15812020 kB",
+    "memory_available_kb": "7279416 kB",
+    "aslr": 2,
+    "swappiness": 60
+  }
+}

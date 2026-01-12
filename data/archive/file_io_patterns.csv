@@ -1,0 +1,7 @@
+run,workload_type,timestamp_ns,runtime_ns,voluntary_ctxt_switches,nonvoluntary_ctxt_switches,minor_page_faults,major_page_faults,start_cpu,end_cpu,throughput_mbs
+0,sequential_read,25605136191522,11710682,0,0,0,0,-1,-1,5465.10
+1,sequential_write,25605147959010,25007839,0,0,0,0,-1,-1,2559.20
+2,random_read,25605201258911,134362,0,0,0,0,-1,-1,476325.15
+3,direct_io_read,25605201429328,254456722,0,0,0,0,-1,-1,251.52
+4,mmap_sequential,25605455911187,3242328,0,0,0,0,-1,-1,19738.90
+5,mmap_random,25605460019735,1523386,0,0,0,0,-1,-1,42011.68

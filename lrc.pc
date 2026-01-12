@@ -1,0 +1,10 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include/lrc
+
+Name: lrc
+Description: Linux Reality Check - Performance measurement library
+Version: 2.1.0
+Libs: -L${libdir} -llrc -lrt
+Cflags: -I${includedir}

@@ -1,0 +1,879 @@
+#!/bin/bash
+#
+# Linux Reality Check (LRC) - Main CLI Interface v2.0
+#
+# A user-friendly command-line tool for running performance experiments
+# with comprehensive error handling, progress tracking, and interruption safety
+
+set -eo pipefail  # Exit on error, pipefail for better error detection
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DATA_DIR="$PROJECT_ROOT/data"
+ANALYZE_DIR="$PROJECT_ROOT/analyze"
+SCENARIOS_DIR="$PROJECT_ROOT/scenarios"
+TEMP_DIR="${TMPDIR:-/tmp}/lrc-$$"
+
+# Version
+VERSION="2.0"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m' # No Color
+
+# Experiment PIDs for cleanup
+declare -a EXPERIMENT_PIDS=()
+
+# Cleanup handler
+cleanup() {
+    local exit_code=$?
+    
+    # Kill any running experiments
+    if [ ${#EXPERIMENT_PIDS[@]} -gt 0 ]; then
+        print_warning "Cleaning up running experiments..."
+        for pid in "${EXPERIMENT_PIDS[@]}"; do
+            if ps -p "$pid" >/dev/null 2>&1; then
+                kill "$pid" 2>/dev/null || true
+                wait "$pid" 2>/dev/null || true
+            fi
+        done
+    fi
+    
+    # Clean up temp directory
+    if [ -d "$TEMP_DIR" ]; then
+        rm -rf "$TEMP_DIR" 2>/dev/null || true
+    fi
+    
+    # Restore terminal settings
+    stty sane 2>/dev/null || true
+    
+    if [ $exit_code -ne 0 ] && [ $exit_code -ne 130 ]; then
+        echo ""
+        print_error "LRC exited unexpectedly (code: $exit_code)"
+    fi
+}
+
+trap cleanup EXIT
+trap 'echo ""; print_warning "Interrupted by user. Cleaning up..."; exit 130' INT TERM
+
+# Helper functions
+print_header() {
+    clear
+    echo -e "${BOLD}${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${BLUE}║          Linux Reality Check (LRC) v${VERSION}                   ║${NC}"
+    echo -e "${BOLD}${BLUE}║          Research-Grade Performance Measurement           ║${NC}"
+    echo -e "${BOLD}${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+print_success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}✗${NC} $1" >&2
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ${NC} $1"
+}
+
+print_progress() {
+    echo -e "${CYAN}⟳${NC} $1"
+}
+
+print_dim() {
+    echo -e "${DIM}$1${NC}"
+}
+
+# Spinner for long operations
+spinner() {
+    local pid=$1
+    local message=$2
+    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+    
+    while ps -p "$pid" >/dev/null 2>&1; do
+        local char="${spinstr:$i:1}"
+        echo -ne "\r${CYAN}${char}${NC} ${message}..."
+        i=$(( (i + 1) % ${#spinstr} ))
+        sleep 0.1
+    done
+    echo -ne "\r"
+}
+
+# Progress bar
+progress_bar() {
+    local current=$1
+    local total=$2
+    local width=40
+    local percentage=$((current * 100 / total))
+    local filled=$((current * width / total))
+    local empty=$((width - filled))
+    
+    printf "\r${CYAN}["
+    printf "%${filled}s" | tr ' ' '█'
+    printf "%${empty}s" | tr ' ' '░'
+    printf "]${NC} %3d%% (%d/%d)" "$percentage" "$current" "$total"
+}
+
+# Check if running in terminal
+is_interactive() {
+    [[ -t 0 && -t 1 ]]
+}
+
+# Validate experiment name
+validate_experiment() {
+    local exp=$1
+    local valid_experiments=(pinned nice_levels null_baseline cache_hierarchy cache_analysis 
+                            latency_vs_bandwidth numa_locality lock_scaling syscall_overhead 
+                            realistic_patterns)
+    
+    for valid_exp in "${valid_experiments[@]}"; do
+        if [ "$exp" = "$valid_exp" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Check if experiment binary exists
+experiment_exists() {
+    local exp=$1
+    [ -x "$SCENARIOS_DIR/$exp" ]
+}
+
+# Get experiment duration estimate
+get_experiment_duration() {
+    local exp=$1
+    case "$exp" in
+        null_baseline) echo "5s" ;;
+        pinned) echo "15s" ;;
+        nice_levels) echo "20s" ;;
+        cache_hierarchy) echo "20s" ;;
+        syscall_overhead) echo "15s" ;;
+        cache_analysis) echo "30s" ;;
+        latency_vs_bandwidth) echo "25s" ;;
+        numa_locality) echo "30s" ;;
+        lock_scaling) echo "45s" ;;
+        realistic_patterns) echo "60s" ;;
+        *) echo "?" ;;
+    esac
+}
+
+# Get experiment description
+get_experiment_description() {
+    local exp=$1
+    case "$exp" in
+        pinned) echo "CPU affinity impact on performance" ;;
+        nice_levels) echo "Process priority impact on scheduling" ;;
+        null_baseline) echo "Measurement overhead quantification" ;;
+        cache_hierarchy) echo "L1/L2/L3 cache latency measurement" ;;
+        cache_analysis) echo "Cache behavior with perf counters" ;;
+        latency_vs_bandwidth) echo "Memory access patterns" ;;
+        numa_locality) echo "NUMA memory placement effects" ;;
+        lock_scaling) echo "Lock contention with 1,2,4,8 threads" ;;
+        syscall_overhead) echo "System call cost measurement" ;;
+        realistic_patterns) echo "5 mixed CPU+memory workloads" ;;
+        *) echo "Unknown experiment" ;;
+    esac
+}
+
+# Check system requirements with caching
+check_system() {
+    local quiet=$1
+    
+    if [ "$quiet" != "quiet" ]; then
+        print_info "Checking system configuration..."
+        echo ""
+    fi
+    
+    # CPU info
+    if [ ! -f "$TEMP_DIR/system_info" ]; then
+        mkdir -p "$TEMP_DIR"
+        CPU_MODEL=$(grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)
+        CPU_CORES=$(nproc)
+        KERNEL=$(uname -r)
+        
+        echo "CPU_MODEL=$CPU_MODEL" > "$TEMP_DIR/system_info"
+        echo "CPU_CORES=$CPU_CORES" >> "$TEMP_DIR/system_info"
+        echo "KERNEL=$KERNEL" >> "$TEMP_DIR/system_info"
+    else
+        source "$TEMP_DIR/system_info"
+    fi
+    
+    if [ "$quiet" != "quiet" ]; then
+        echo "  CPU: $CPU_MODEL"
+        echo "  Cores: $CPU_CORES"
+        echo "  Kernel: $KERNEL"
+    fi
+    
+    # CPU governor
+    if [ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]; then
+        GOV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)
+        if [ "$quiet" != "quiet" ]; then
+            echo "  Governor: $GOV"
+        fi
+        if [ "$GOV" != "performance" ]; then
+            if [ "$quiet" != "quiet" ]; then
+                print_warning "CPU governor is '$GOV' (recommend 'performance' for reproducibility)"
+                echo "    Fix: sudo cpupower frequency-set -g performance"
+            fi
+        else
+            if [ "$quiet" != "quiet" ]; then
+                print_success "CPU governor set to 'performance'"
+            fi
+        fi
+    fi
+    
+    # Check perf_event_paranoid
+    if [ -f /proc/sys/kernel/perf_event_paranoid ]; then
+        PARANOID=$(cat /proc/sys/kernel/perf_event_paranoid)
+        if [ "$quiet" != "quiet" ]; then
+            echo "  perf_event_paranoid: $PARANOID"
+        fi
+        if [ "$PARANOID" -gt 1 ]; then
+            if [ "$quiet" != "quiet" ]; then
+                print_warning "perf counters may be restricted (value: $PARANOID, recommend: ≤1)"
+                echo "    Fix: sudo sysctl -w kernel.perf_event_paranoid=1"
+            fi
+        fi
+    fi
+    
+    # Check NUMA
+    if [ -d /sys/devices/system/node/node1 ]; then
+        NUMA_NODES=$(ls -d /sys/devices/system/node/node* 2>/dev/null | wc -l)
+        if [ "$quiet" != "quiet" ]; then
+            print_success "NUMA system detected ($NUMA_NODES nodes)"
+        fi
+    else
+        if [ "$quiet" != "quiet" ]; then
+            print_info "Single NUMA node (NUMA experiments will work but show no variance)"
+        fi
+    fi
+    
+    # Check available disk space
+    if [ "$quiet" != "quiet" ]; then
+        AVAILABLE_MB=$(df -BM "$DATA_DIR" 2>/dev/null | tail -1 | awk '{print $4}' | sed 's/M//')
+        if [ -n "$AVAILABLE_MB" ] && [ "$AVAILABLE_MB" -lt 100 ]; then
+            print_warning "Low disk space: ${AVAILABLE_MB}MB available (recommend: >100MB)"
+        fi
+    fi
+    
+    if [ "$quiet" != "quiet" ]; then
+        echo ""
+    fi
+}
+
+# Build all components with progress
+build_project() {
+    print_progress "Building LRC components..."
+    echo ""
+    
+    # Build core
+    (cd "$PROJECT_ROOT/core" && make clean >/dev/null 2>&1 || true && make -j$(nproc)) &
+    local core_pid=$!
+    spinner $core_pid "Building core library"
+    
+    if wait $core_pid; then
+        print_success "Core library built"
+    else
+        print_error "Core library build failed"
+        return 1
+    fi
+    
+    # Build scenarios
+    (cd "$PROJECT_ROOT/scenarios" && make clean >/dev/null 2>&1 || true && make -j$(nproc)) &
+    local scenarios_pid=$!
+    spinner $scenarios_pid "Building scenarios"
+    
+    if wait $scenarios_pid; then
+        print_success "All 20 scenarios built"
+    else
+        print_error "Scenarios build failed"
+        return 1
+    fi
+    
+    echo ""
+}
+
+# List available scenarios with enhanced formatting
+list_scenarios() {
+    echo -e "${BOLD}Available Experiments:${NC}"
+    echo ""
+    echo -e "${BOLD}Basic Performance:${NC}"
+    echo -e "  ${CYAN}1.${NC} pinned          (~15s) - CPU affinity impact on performance"
+    echo -e "  ${CYAN}2.${NC} nice_levels     (~20s) - Process priority impact on scheduling"
+    echo -e "  ${CYAN}3.${NC} null_baseline   (~5s)  - Measurement overhead quantification"
+    echo ""
+    echo -e "${BOLD}Memory Hierarchy:${NC}"
+    echo -e "  ${CYAN}4.${NC} cache_hierarchy (~20s) - L1/L2/L3 cache latency measurement"
+    echo -e "  ${CYAN}5.${NC} cache_analysis  (~30s) - Cache behavior with perf counters"
+    echo -e "  ${CYAN}6.${NC} latency_vs_bandwidth (~25s) - Memory access patterns"
+    echo ""
+    echo -e "${BOLD}Multi-Core & NUMA:${NC}"
+    echo -e "  ${CYAN}7.${NC} numa_locality   (~30s) - NUMA memory placement effects"
+    echo -e "  ${CYAN}8.${NC} lock_scaling    (~45s) - Lock contention with 1,2,4,8 threads"
+    echo ""
+    echo -e "${BOLD}System Calls & Mixed:${NC}"
+    echo -e "  ${CYAN}9.${NC} syscall_overhead (~15s) - System call cost measurement"
+    echo -e "  ${CYAN}10.${NC} realistic_patterns (~60s) - 5 mixed CPU+memory workloads"
+    echo ""
+}
+
+# Store experiment results in database
+store_in_database() {
+    local scenario=$1
+    local csv_file=$2
+    
+    # Check if database tool exists
+    if [ ! -f "$ANALYZE_DIR/db.py" ]; then
+        return 0  # Silently skip if db.py not available
+    fi
+    
+    # Capture metadata
+    local metadata_file="$TEMP_DIR/metadata_${scenario}.json"
+    if command -v python3 &> /dev/null; then
+        python3 "$ANALYZE_DIR/capture_metadata.py" --output "$metadata_file" > /dev/null 2>&1 || true
+    fi
+    
+    # Store in database
+    local db_args="--store $csv_file --scenario $scenario"
+    if [ -f "$metadata_file" ]; then
+        db_args="$db_args --metadata $metadata_file"
+    fi
+    
+    if python3 "$ANALYZE_DIR/db.py" $db_args > /dev/null 2>&1; then
+        print_info "✓ Stored in database (~/.lrc/results.db)"
+    fi
+}
+
+# Run a single experiment with enhanced error handling and progress
+run_experiment() {
+    local scenario=$1
+    local show_analysis=${2:-true}
+    local scenario_path="$SCENARIOS_DIR/$scenario"
+    
+    # Validation
+    if ! validate_experiment "$scenario"; then
+        print_error "Unknown experiment: '$scenario'"
+        echo ""
+        echo "Available experiments:"
+        list_scenarios
+        return 1
+    fi
+    
+    if [ ! -x "$scenario_path" ]; then
+        print_error "Experiment '$scenario' not found or not executable"
+        echo ""
+        print_info "Try rebuilding: ./lrc build"
+        return 1
+    fi
+    
+    mkdir -p "$DATA_DIR"
+    
+    local duration=$(get_experiment_duration "$scenario")
+    local description=$(get_experiment_description "$scenario")
+    
+    echo -e "${BOLD}Running: ${CYAN}$scenario${NC} ${DIM}($duration - $description)${NC}"
+    echo ""
+    
+    # Check if previous results exist
+    if [ -f "$DATA_DIR/${scenario}.csv" ]; then
+        print_warning "Previous results exist: data/${scenario}.csv"
+        if is_interactive; then
+            read -p "  Overwrite? (y/N): " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                print_info "Skipped. Previous results preserved."
+                return 0
+            fi
+        fi
+    fi
+    
+    # Run the experiment
+    cd "$SCENARIOS_DIR"
+    local start_time=$(date +%s)
+    
+    # Redirect output, capture errors
+    if ./"$scenario" > "$TEMP_DIR/${scenario}.log" 2>&1; then
+        local end_time=$(date +%s)
+        local elapsed=$((end_time - start_time))
+        
+        print_success "Experiment completed in ${elapsed}s"
+        echo ""
+        
+        # Check if CSV was generated
+        local csv_file="$DATA_DIR/${scenario}.csv"
+        if [ -f "$csv_file" ]; then
+            local lines=$(wc -l < "$csv_file")
+            local data_points=$((lines - 1))
+            print_success "Data saved to: data/${scenario}.csv"
+            print_info "$data_points data points collected"
+            
+            # Store in database if requested
+            if [ "${STORE_DB:-false}" = "true" ]; then
+                store_in_database "$scenario" "$csv_file"
+            fi
+            
+            # Show analysis if requested
+            if [ "$show_analysis" = "true" ]; then
+                echo ""
+                echo "════════════════════════════════════════════════════════════"
+                echo ""
+                analyze_experiment "$scenario" "inline"
+            fi
+        else
+            print_warning "No CSV file generated (check experiment output)"
+        fi
+    else
+        local exit_code=$?
+        print_error "Experiment failed (exit code: $exit_code)"
+        echo ""
+        print_info "Last 10 lines of output:"
+        tail -10 "$TEMP_DIR/${scenario}.log" 2>/dev/null || echo "  (no output captured)"
+        return 1
+    fi
+}
+
+# Analyze experiment data with error handling
+analyze_experiment() {
+    local scenario=$1
+    local mode=${2:-standalone}
+    local csv_file="$DATA_DIR/${scenario}.csv"
+    
+    if [ ! -f "$csv_file" ]; then
+        print_error "No data found for '$scenario'"
+        echo ""
+        print_info "Run the experiment first: ./lrc run $scenario"
+        return 1
+    fi
+    
+    if [ "$mode" = "standalone" ]; then
+        echo -e "${BOLD}Analyzing: ${CYAN}$scenario${NC}"
+        echo ""
+    fi
+    
+    # Check if Python is available
+    if ! command -v python3 &> /dev/null; then
+        print_error "python3 not found (required for analysis)"
+        return 1
+    fi
+    
+    # Run analysis tools with error handling
+    local analysis_tools=(parse.py classify.py distributions.py outliers.py)
+    local failed=0
+    
+    for tool in "${analysis_tools[@]}"; do
+        local tool_path="$ANALYZE_DIR/$tool"
+        if [ -f "$tool_path" ]; then
+            if ! python3 "$tool_path" "$csv_file" 2>/dev/null; then
+                failed=$((failed + 1))
+            fi
+            echo ""
+        fi
+    done
+    
+    if [ $failed -gt 0 ]; then
+        print_warning "$failed analysis tool(s) encountered errors"
+    fi
+}
+
+# Quick test suite with progress tracking
+run_quick_suite() {
+    local experiments=(null_baseline pinned syscall_overhead)
+    local total=${#experiments[@]}
+    local completed=0
+    local failed=0
+    
+    print_info "Running quick test suite (${total} experiments)..."
+    echo ""
+    
+    for exp in "${experiments[@]}"; do
+        completed=$((completed + 1))
+        
+        progress_bar $completed $total
+        echo ""
+        echo ""
+        
+        if run_experiment "$exp" "true"; then
+            echo ""
+        else
+            failed=$((failed + 1))
+            echo ""
+        fi
+        
+        # Separator between experiments
+        if [ $completed -lt $total ]; then
+            echo "════════════════════════════════════════════════════════════"
+            echo ""
+        fi
+    done
+    
+    # Summary
+    echo ""
+    echo -e "${BOLD}Quick Test Suite Complete${NC}"
+    echo ""
+    local passed=$((total - failed))
+    print_success "$passed/$total experiments completed"
+    
+    if [ $failed -gt 0 ]; then
+        print_warning "$failed experiment(s) failed"
+    fi
+}
+
+# Run all experiments with progress tracking
+run_all_experiments() {
+    local experiments=(pinned nice_levels null_baseline cache_hierarchy cache_analysis 
+                      latency_vs_bandwidth numa_locality lock_scaling syscall_overhead 
+                      realistic_patterns)
+    local total=${#experiments[@]}
+    local completed=0
+    local failed=0
+    
+    print_info "Running all ${total} experiments..."
+    echo ""
+    print_warning "This will take approximately 5 minutes"
+    echo ""
+    
+    local overall_start=$(date +%s)
+    
+    for exp in "${experiments[@]}"; do
+        completed=$((completed + 1))
+        
+        progress_bar $completed $total
+        echo ""
+        echo ""
+        
+        echo -e "${BOLD}═══ [$completed/$total] $exp ═══${NC}"
+        echo ""
+        
+        if run_experiment "$exp" "false"; then
+            echo ""
+        else
+            failed=$((failed + 1))
+            echo ""
+        fi
+        
+        # Brief pause between experiments
+        sleep 0.5
+    done
+    
+    local overall_end=$(date +%s)
+    local overall_elapsed=$((overall_end - overall_start))
+    local minutes=$((overall_elapsed / 60))
+    local seconds=$((overall_elapsed % 60))
+    
+    # Summary
+    echo ""
+    echo -e "${BOLD}All Experiments Complete${NC}"
+    echo ""
+    print_info "Total time: ${minutes}m ${seconds}s"
+    
+    local passed=$((total - failed))
+    print_success "$passed/$total experiments completed successfully"
+    
+    if [ $failed -gt 0 ]; then
+        print_error "$failed experiment(s) failed"
+    else
+        echo ""
+        print_success "All results saved to: data/"
+        echo ""
+        print_info "Analyze individual results with: ./lrc analyze <experiment>"
+        print_info "Compare all results with: python3 analyze/compare.py data/*.csv"
+    fi
+}
+
+# Interactive menu with improved UX
+interactive_menu() {
+    while true; do
+        print_header
+        check_system "quiet"
+        
+        # Show disk usage
+        local data_size=$(du -sh "$DATA_DIR" 2>/dev/null | cut -f1 || echo "0")
+        echo -e "${DIM}Data directory: $data_size${NC}"
+        echo ""
+        
+        list_scenarios
+        
+        echo -e "${BOLD}Quick Commands:${NC}"
+        echo -e "  ${GREEN}quick${NC}      - Run quick test suite (3 experiments, ~50s)"
+        echo -e "  ${GREEN}all${NC}        - Run all 10 experiments (~5min)"
+        echo -e "  ${GREEN}build${NC}      - Rebuild all components"
+        echo -e "  ${GREEN}analyze${NC}    - Analyze existing results"
+        echo -e "  ${GREEN}clean${NC}      - Clean old results"
+        echo -e "  ${GREEN}help${NC}       - Show detailed help"
+        echo -e "  ${GREEN}quit${NC}       - Exit"
+        echo ""
+        
+        # Show recent experiments
+        if [ -d "$DATA_DIR" ] && [ "$(ls -A $DATA_DIR/*.csv 2>/dev/null)" ]; then
+            echo -e "${DIM}Recent results:${NC}"
+            ls -t "$DATA_DIR"/*.csv 2>/dev/null | head -3 | while read -r file; do
+                local name=$(basename "$file" .csv)
+                local age=$(( ($(date +%s) - $(stat -c %Y "$file")) / 60 ))
+                echo -e "  ${DIM}• $name (${age}m ago)${NC}"
+            done
+            echo ""
+        fi
+        
+        read -p "$(echo -e ${CYAN}Select experiment, command, or 'quit': ${NC})" choice
+        echo ""
+        
+        case "$choice" in
+            1|pinned) run_experiment "pinned" "true" ;;
+            2|nice_levels) run_experiment "nice_levels" "true" ;;
+            3|null_baseline) run_experiment "null_baseline" "true" ;;
+            4|cache_hierarchy) run_experiment "cache_hierarchy" "true" ;;
+            5|cache_analysis) run_experiment "cache_analysis" "true" ;;
+            6|latency_vs_bandwidth) run_experiment "latency_vs_bandwidth" "true" ;;
+            7|numa_locality) run_experiment "numa_locality" "true" ;;
+            8|lock_scaling) run_experiment "lock_scaling" "true" ;;
+            9|syscall_overhead) run_experiment "syscall_overhead" "true" ;;
+            10|realistic_patterns) run_experiment "realistic_patterns" "true" ;;
+            quick) run_quick_suite ;;
+            all) run_all_experiments ;;
+            build) build_project ;;
+            analyze)
+                echo "Available results:"
+                ls -1 "$DATA_DIR"/*.csv 2>/dev/null | sed 's|.*/||; s|\.csv$||' | nl || echo "  (none)"
+                echo ""
+                read -p "Enter experiment name: " exp_name
+                if [ -n "$exp_name" ]; then
+                    analyze_experiment "$exp_name" "standalone"
+                fi
+                ;;
+            clean)
+                echo -e "${YELLOW}Clean old results?${NC}"
+                echo "  This will move all CSV files to data/archive/"
+                read -p "Continue? (y/N): " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    mkdir -p "$DATA_DIR/archive"
+                    mv "$DATA_DIR"/*.csv "$DATA_DIR/archive/" 2>/dev/null || true
+                    print_success "Results archived to data/archive/"
+                fi
+                ;;
+            help)
+                usage
+                ;;
+            quit|q|exit)
+                echo "Goodbye!"
+                exit 0
+                ;;
+            "")
+                # Empty input, just refresh
+                ;;
+            *)
+                print_error "Invalid choice: $choice"
+                sleep 1
+                ;;
+        esac
+        
+        if [ -n "$choice" ] && [ "$choice" != "quit" ] && [ "$choice" != "q" ] && [ "$choice" != "exit" ]; then
+            echo ""
+            read -p "Press Enter to continue..."
+        fi
+    done
+}
+
+# Enhanced usage information
+usage() {
+    print_header
+    echo "Usage: $0 <command> [options]"
+    echo ""
+    echo -e "${BOLD}Commands:${NC}"
+    echo -e "  ${GREEN}run <experiment>${NC}     Run a specific experiment"
+    echo -e "      ${DIM}--store${NC}             Store results in database"
+    echo -e "  ${GREEN}analyze <experiment>${NC} Analyze results from an experiment"
+    echo -e "  ${GREEN}quick${NC}               Run quick test suite (3 experiments)"
+    echo -e "  ${GREEN}all${NC}                 Run all 10 experiments"
+    echo -e "  ${GREEN}list${NC}                List all available experiments"
+    echo -e "  ${GREEN}build${NC}               Build/rebuild all components"
+    echo -e "  ${GREEN}check${NC}               Check system configuration"
+    echo -e "  ${GREEN}clean${NC}               Archive old results"
+    echo -e "  ${GREEN}store <experiment>${NC}  Store existing results in database"
+    echo -e "  ${GREEN}db [db.py args]${NC}     Database operations (init, list, export, query)"
+    echo -e "  ${GREEN}version${NC}             Show version information"
+    echo -e "  ${GREEN}menu${NC}                Interactive menu (default)"
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  $0 run pinned              # Run pinned CPU experiment"
+    echo "  $0 run --store pinned      # Run and store in database"
+    echo "  $0 analyze cache_hierarchy # Analyze cache results"
+    echo "  $0 store null_baseline     # Store existing results"
+    echo "  $0 db --list               # List stored experiments"
+    echo "  $0 db --export 1 -o exp.csv # Export experiment from DB"
+    echo "  $0 quick                   # Run 3 quick tests"
+    echo "  $0 menu                    # Interactive mode"
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo "  -h, --help                 Show this help message"
+    echo "  -v, --version              Show version information"
+    echo "  --no-color                 Disable colored output"
+    echo ""
+    echo -e "${BOLD}Database:${NC}"
+    echo "  Results stored in: ~/.lrc/results.db"
+    echo "  Initialize with: $0 db --init"
+    echo ""
+}
+
+# Version information
+show_version() {
+    print_header
+    echo "Linux Reality Check (LRC) version $VERSION"
+    echo ""
+    echo "Components:"
+    echo "  • 20 experiments (C)"
+    echo "  • 17 analysis tools (Python)"
+    echo "  • Database system"
+    echo ""
+    echo "System:"
+    check_system "quiet"
+    echo ""
+}
+
+# Main entry point
+main() {
+    # Parse global options
+    case "$1" in
+        --no-color)
+            RED=''; GREEN=''; YELLOW=''; BLUE=''; CYAN=''; MAGENTA=''
+            BOLD=''; DIM=''; NC=''
+            shift
+            ;;
+    esac
+    
+    cd "$PROJECT_ROOT"
+    
+    # Create temp directory
+    mkdir -p "$TEMP_DIR"
+    
+    if [ $# -eq 0 ]; then
+        interactive_menu
+        exit 0
+    fi
+    
+    case "$1" in
+        run)
+            # Parse flags
+            STORE_DB=false
+            while [[ "$2" == --* ]]; do
+                case "$2" in
+                    --store)
+                        STORE_DB=true
+                        shift
+                        ;;
+                    *)
+                        print_error "Unknown flag: $2"
+                        exit 1
+                        ;;
+                esac
+            done
+            
+            if [ -z "$2" ]; then
+                print_error "Usage: $0 run [--store] <experiment>"
+                exit 1
+            fi
+            print_header
+            check_system "quiet"
+            echo ""
+            run_experiment "$2" "true"
+            ;;
+        analyze)
+            if [ -z "$2" ]; then
+                print_error "Usage: $0 analyze <experiment>"
+                exit 1
+            fi
+            print_header
+            analyze_experiment "$2" "standalone"
+            ;;
+        quick)
+            print_header
+            check_system "quiet"
+            echo ""
+            run_quick_suite
+            ;;
+        all)
+            print_header
+            check_system "quiet"
+            echo ""
+            run_all_experiments
+            ;;
+        list)
+            print_header
+            list_scenarios
+            ;;
+        build)
+            print_header
+            build_project
+            ;;
+        check)
+            print_header
+            check_system "verbose"
+            ;;
+        clean)
+            print_header
+            mkdir -p "$DATA_DIR/archive"
+            local count=$(ls "$DATA_DIR"/*.csv 2>/dev/null | wc -l)
+            if [ "$count" -gt 0 ]; then
+                mv "$DATA_DIR"/*.csv "$DATA_DIR/archive/" 2>/dev/null || true
+                print_success "Archived $count result file(s) to data/archive/"
+            else
+                print_info "No results to clean"
+            fi
+            ;;
+        db)
+            # Database operations - pass through to db.py
+            shift
+            if [ ! -f "$ANALYZE_DIR/db.py" ]; then
+                print_error "Database tool not found: analyze/db.py"
+                exit 1
+            fi
+            python3 "$ANALYZE_DIR/db.py" "$@"
+            ;;
+        store)
+            # Quick store command: ./lrc store <scenario>
+            if [ -z "$2" ]; then
+                print_error "Usage: $0 store <experiment>"
+                exit 1
+            fi
+            local csv_file="$DATA_DIR/$2.csv"
+            if [ ! -f "$csv_file" ]; then
+                print_error "No data found for '$2'"
+                print_info "Run the experiment first: ./lrc run $2"
+                exit 1
+            fi
+            STORE_DB=true
+            store_in_database "$2" "$csv_file"
+            ;;
+        menu)
+            interactive_menu
+            ;;
+        version|-v|--version)
+            show_version
+            ;;
+        -h|--help|help)
+            usage
+            ;;
+        *)
+            print_error "Unknown command: $1"
+            echo ""
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

@@ -1,0 +1,64 @@
+name: Linux Reality Check CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 python3-pip
+
+      - name: Build core library
+        run: |
+          cd core
+          make clean
+          make
+
+      - name: Build scenarios
+        run: |
+          cd scenarios
+          make clean
+          make
+
+      - name: Test analysis tools
+        run: |
+          cd analyze
+          python3 -c "import parse, classify, outliers, timeseries, compare"
+          echo "All Python modules importable"
+
+  code-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Python linting
+        run: |
+          pip3 install flake8
+          flake8 analyze/*.py report/*.py --max-line-length=100 || true
+
+  documentation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check documentation
+        run: |
+          test -f README.md
+          test -f docs/hypothesis.md
+          test -f docs/methodology.md
+          echo "Documentation present"
