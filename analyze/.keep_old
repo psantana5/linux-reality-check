@@ -1,0 +1,8 @@
+# Old scripts (deprecated, kept for reference)
+
+These scripts use parametric statistics (mean, std, t-tests) which are
+academically unsound for heavy-tailed systems data.
+
+Use the new scripts instead:
+- hypothesis.py (quantile-based comparison)
+- plot_robust.py (ECDF, quantiles, boxplots)
