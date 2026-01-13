@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
-distributions.py - Distribution analysis and visualization
+distributions.py - Non-parametric distribution analysis
 
 Purpose:
-  Analyze runtime distributions to understand variance sources.
-  Identify bimodal patterns, tail latency, outliers.
+  Academically rigorous analysis of runtime distributions using
+  non-parametric methods appropriate for heavy-tailed systems data.
+
+Academic Rationale:
+  - Uses ECDF instead of histograms/KDE (no binning/smoothing artifacts)
+  - Reports median/IQR instead of mean/std (robust to heavy tails)
+  - Quantile-based summaries (p50-p99.9) for tail latency
+  - No parametric assumptions (no normal fits)
+  - Outliers are retained and explained (meaningful tail behavior)
 """
 
 import sys
@@ -13,60 +20,90 @@ from typing import List, Dict
 import statistics
 sys.path.insert(0, str(Path(__file__).parent))
 from parse import parse_csv, RunGroup
+from robust_stats import (
+    describe_robust,
+    ecdf_values,
+    tukey_fences,
+    quantile,
+    median,
+    iqr,
+    mad,
+    tail_heaviness_ratio
+)
 
 
-def histogram_ascii(values: List[float], bins: int = 10, width: int = 40) -> None:
-    """Draw ASCII histogram."""
+def ecdf_ascii(values: List[float], points: int = 20, width: int = 40) -> None:
+    """
+    Draw ASCII ECDF (Empirical Cumulative Distribution Function).
+    
+    ECDF is superior to histograms for systems data because:
+    - No arbitrary binning decisions
+    - Shows all data without information loss
+    - Clearly reveals tail behavior
+    """
     if len(values) < 2:
-        print("  Insufficient data for histogram")
+        print("  Insufficient data for ECDF")
         return
     
-    min_val = min(values)
-    max_val = max(values)
+    sorted_vals = sorted(values)
+    n = len(sorted_vals)
+    min_val = sorted_vals[0]
+    max_val = sorted_vals[-1]
     
     if max_val == min_val:
         print(f"  All values identical: {min_val:.2f}")
         return
     
-    # Calculate bin edges
-    bin_width = (max_val - min_val) / bins
-    bins_data = [0] * bins
-    
-    # Count values in each bin
-    for val in values:
-        bin_idx = int((val - min_val) / bin_width)
-        if bin_idx >= bins:
-            bin_idx = bins - 1
-        bins_data[bin_idx] += 1
-    
-    # Find max count for scaling
-    max_count = max(bins_data)
-    
-    # Print histogram
-    for i, count in enumerate(bins_data):
-        bin_start = min_val + i * bin_width
-        bin_end = bin_start + bin_width
-        bar_len = int((count / max_count) * width) if max_count > 0 else 0
+    # Sample ECDF at regular intervals
+    print("  ECDF (cumulative probability):")
+    for i in range(points):
+        # Value at this percentile
+        percentile = i / (points - 1)
+        val = sorted_vals[int(percentile * (n - 1))]
+        
+        # Draw bar
+        bar_len = int(percentile * width)
         bar = "█" * bar_len
-        pct = (count / len(values)) * 100
-        print(f"  {bin_start:7.1f}-{bin_end:7.1f}: {bar} ({pct:4.1f}%)")
+        
+        # Show key percentiles with labels
+        if i == 0:
+            label = "min"
+        elif abs(percentile - 0.25) < 0.02:
+            label = "p25"
+        elif abs(percentile - 0.50) < 0.02:
+            label = "p50"
+        elif abs(percentile - 0.75) < 0.02:
+            label = "p75"
+        elif abs(percentile - 0.90) < 0.02:
+            label = "p90"
+        elif abs(percentile - 0.99) < 0.02:
+            label = "p99"
+        elif i == points - 1:
+            label = "max"
+        else:
+            label = ""
+        
+        print(f"  {val:7.1f} {bar} {label}")
 
 
 def percentiles(values: List[float]) -> Dict[str, float]:
-    """Calculate percentile values."""
-    sorted_vals = sorted(values)
-    n = len(sorted_vals)
+    """Calculate percentile values using robust quantile function."""
+    if not values:
+        return {}
+    
+    from robust_stats import quantile
     
     return {
-        'p1': sorted_vals[int(n * 0.01)],
-        'p5': sorted_vals[int(n * 0.05)],
-        'p10': sorted_vals[int(n * 0.10)],
-        'p25': sorted_vals[int(n * 0.25)],
-        'p50': sorted_vals[int(n * 0.50)],
-        'p75': sorted_vals[int(n * 0.75)],
-        'p90': sorted_vals[int(n * 0.90)],
-        'p95': sorted_vals[int(n * 0.95)],
-        'p99': sorted_vals[int(n * 0.99)] if n > 100 else sorted_vals[-1],
+        'p1': quantile(values, 0.01),
+        'p5': quantile(values, 0.05),
+        'p10': quantile(values, 0.10),
+        'p25': quantile(values, 0.25),
+        'p50': quantile(values, 0.50),
+        'p75': quantile(values, 0.75),
+        'p90': quantile(values, 0.90),
+        'p95': quantile(values, 0.95),
+        'p99': quantile(values, 0.99),
+        'p99.9': quantile(values, 0.999) if len(values) >= 1000 else quantile(values, 0.99),
     }
 
 
@@ -88,62 +125,109 @@ def detect_bimodal(values: List[float]) -> bool:
     return max_gap > 3 * mean_gap
 
 
-def coefficient_of_variation(values: List[float]) -> float:
-    """CV = (stdev / mean) * 100"""
+def coefficient_of_variation_robust(values: List[float]) -> float:
+    """
+    Robust coefficient of variation using MAD.
+    
+    Traditional CV uses (std/mean), which is unreliable for heavy tails.
+    This uses (MAD/median) * 1.4826 for consistency with normal distribution.
+    """
     if len(values) < 2:
         return 0.0
-    mean = statistics.mean(values)
-    if mean == 0:
+    
+    from robust_stats import median, mad
+    
+    med = median(values)
+    if med == 0:
         return 0.0
-    return (statistics.stdev(values) / mean) * 100
+    
+    mad_val = mad(values)
+    # Scale MAD to match std for normal distribution
+    return (mad_val * 1.4826 / med) * 100
 
 
 def analyze_distribution(group: RunGroup) -> None:
-    """Analyze and visualize distribution for a run group."""
+    """
+    Analyze distribution using academically rigorous non-parametric methods.
+    
+    Reports:
+    - Median and IQR (not mean and std)
+    - Full quantile summary (p1-p99.9)
+    - Tail heaviness ratio
+    - ECDF visualization (not histogram)
+    - Flagged extreme values (retained, not removed)
+    """
     runtimes = [r.runtime_ms for r in group.runs]
     
     print(f"\n{'='*70}")
     print(f"{group.name}")
     print(f"{'='*70}")
     
-    # Basic statistics
-    print(f"\nBasic Statistics:")
-    print(f"  Count:  {len(runtimes)}")
-    print(f"  Mean:   {statistics.mean(runtimes):.2f} ms")
-    print(f"  Median: {statistics.median(runtimes):.2f} ms")
-    print(f"  Stdev:  {statistics.stdev(runtimes):.2f} ms" if len(runtimes) > 1 else "  Stdev:  N/A")
-    print(f"  Min:    {min(runtimes):.2f} ms")
-    print(f"  Max:    {max(runtimes):.2f} ms")
-    print(f"  Range:  {max(runtimes) - min(runtimes):.2f} ms")
-    print(f"  CV:     {coefficient_of_variation(runtimes):.2f}%")
+    # Robust summary statistics
+    stats = describe_robust(runtimes)
     
-    # Percentiles
+    print(f"\nRobust Statistics (non-parametric):")
+    print(f"  Count:  {stats['n']}")
+    print(f"  Median: {stats['median']:.2f} ms  [robust central tendency]")
+    print(f"  IQR:    {stats['iqr']:.2f} ms  [robust spread, Q3-Q1]")
+    print(f"  MAD:    {stats['mad']:.2f} ms  [median absolute deviation]")
+    print(f"  Range:  [{stats['min']:.2f}, {stats['max']:.2f}] ms")
+    
+    # Optional: show mean/std for comparison (but note unreliability)
+    mean_val = statistics.mean(runtimes)
+    std_val = statistics.stdev(runtimes) if len(runtimes) > 1 else 0.0
+    print(f"\n  Reference (parametric, unreliable for heavy tails):")
+    print(f"    Mean:  {mean_val:.2f} ms")
+    print(f"    Stdev: {std_val:.2f} ms")
+    
+    # Quantiles (key for systems research)
+    print(f"\nQuantiles (percentiles):")
     percs = percentiles(runtimes)
-    print(f"\nPercentiles:")
-    print(f"  p1:  {percs['p1']:.2f} ms")
-    print(f"  p5:  {percs['p5']:.2f} ms")
-    print(f"  p25: {percs['p25']:.2f} ms")
-    print(f"  p50: {percs['p50']:.2f} ms (median)")
-    print(f"  p75: {percs['p75']:.2f} ms")
-    print(f"  p90: {percs['p90']:.2f} ms")
-    print(f"  p95: {percs['p95']:.2f} ms")
-    print(f"  p99: {percs['p99']:.2f} ms")
+    for key in ['p1', 'p5', 'p25', 'p50', 'p75', 'p90', 'p95', 'p99']:
+        if key in percs:
+            label = "(median)" if key == 'p50' else ""
+            print(f"  {key}: {percs[key]:.2f} ms {label}")
     
-    # Tail latency
-    tail_factor = percs['p99'] / percs['p50']
-    print(f"\nTail Latency:")
-    print(f"  p99/p50 ratio: {tail_factor:.2f}x")
-    if tail_factor > 1.5:
-        print(f"  ⚠ Significant tail latency (p99 is {tail_factor:.1f}x median)")
+    if 'p99.9' in percs:
+        print(f"  p99.9: {percs['p99.9']:.2f} ms")
     
-    # Bimodal detection
+    # Tail latency analysis
+    tail_ratio = stats['tail_ratio']
+    print(f"\nTail Latency Analysis:")
+    print(f"  p99/p50 ratio: {tail_ratio:.2f}x")
+    
+    if tail_ratio < 1.5:
+        print(f"  ✓ Light tails (good performance consistency)")
+    elif tail_ratio < 3.0:
+        print(f"  ⚠ Moderate tails (typical for systems workloads)")
+    else:
+        print(f"  ⚠⚠ Heavy tails (significant tail latency issue)")
+        print(f"     p99 is {tail_ratio:.1f}x worse than median")
+    
+    # Bimodal detection (state-based analysis)
     if detect_bimodal(runtimes):
         print(f"\n⚠ Bimodal distribution detected!")
-        print(f"  Likely cause: cache hits vs misses, or intermittent interference")
+        print(f"  Likely cause: multiple performance regimes")
+        print(f"  (e.g., cache hits vs misses, CPU frequency scaling)")
     
-    # Histogram
-    print(f"\nDistribution (histogram):")
-    histogram_ascii(runtimes, bins=min(10, len(runtimes) // 3 + 1))
+    # ECDF visualization (academically preferred over histogram)
+    print(f"\nEmpirical CDF (no binning artifacts):")
+    ecdf_ascii(runtimes, points=15)
+    
+    # Flag extreme values (but retain them)
+    lower_fence, upper_fence, flagged = tukey_fences(runtimes, k=1.5)
+    
+    if flagged:
+        print(f"\nExtreme values flagged (Tukey fences, k=1.5):")
+        print(f"  Fences: [{lower_fence:.2f}, {upper_fence:.2f}] ms")
+        print(f"  Flagged: {len(flagged)}/{len(runtimes)} values")
+        print(f"  NOTE: These are RETAINED as meaningful tail behavior")
+        
+        for idx in flagged[:5]:  # Show first 5
+            print(f"    Run {idx}: {runtimes[idx]:.2f} ms")
+        
+        if len(flagged) > 5:
+            print(f"    ... and {len(flagged) - 5} more")
 
 
 def main():
