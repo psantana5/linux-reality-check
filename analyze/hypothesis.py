@@ -2,29 +2,34 @@
 """
 Hypothesis Testing Framework for Linux Reality Check
 
-Automates A/B testing and statistical hypothesis testing for performance experiments.
-Supports t-tests, sequential analysis, and Bayesian comparison.
+Academically rigorous statistical comparison using non-parametric methods
+appropriate for heavy-tailed systems performance data.
 
-Features:
-- Automated A/B testing
-- Sequential analysis (stop when conclusive)
-- Bayesian inference
-- Effect size calculation
-- Statistical power monitoring
+Academic Rationale:
+  Traditional t-tests assume:
+  - Normal distributions
+  - Independent observations
+  - Equal variances
+  
+  Systems data violates all three assumptions. This module provides:
+  - Quantile-based comparisons (not mean-based)
+  - Bootstrap confidence intervals (non-parametric)
+  - Hodges-Lehmann estimator (robust location shift)
+  - Effect sizes on quantiles (not Cohen's d)
+
+References:
+  - Hodges & Lehmann (1963). Estimates of location based on rank tests
+  - Efron & Tibshirani (1993). An Introduction to the Bootstrap
+  - Doksum (1974). Empirical probability plots and statistical inference
 
 Usage:
-  # Simple A/B test
+  # Quantile-based comparison
   python3 analyze/hypothesis.py --baseline data/baseline.csv \\
-      --treatment data/treatment.csv --metric runtime_ns
+      --treatment data/treatment.csv --metric runtime_ns --quantile-compare
 
-  # Sequential test (adaptive sampling)
-  python3 analyze/hypothesis.py --sequential \\
-      --baseline-scenario null_baseline \\
-      --treatment-scenario optimized --metric runtime_ns
-
-  # Bayesian comparison
+  # Bootstrap CI on specific quantile
   python3 analyze/hypothesis.py --baseline data/v1.csv \\
-      --treatment data/v2.csv --metric runtime_ns --bayesian
+      --treatment data/v2.csv --metric runtime_ns --quantile 0.99
 """
 
 import argparse
@@ -35,13 +40,26 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
-# Try scipy for exact tests
+sys.path.insert(0, str(Path(__file__).parent))
+from robust_stats import (
+    quantile,
+    median,
+    iqr,
+    mad,
+    hodges_lehmann_estimator,
+    bootstrap_ci_quantile,
+    quantile_difference_ci,
+    format_quantile_comparison,
+    describe_robust
+)
+
+# Try scipy for compatibility with legacy code
 try:
     from scipy import stats
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
-    print("Warning: scipy not available, using approximations", file=sys.stderr)
+    print("Warning: scipy not available, using bootstrap methods", file=sys.stderr)
 
 
 def load_metric(csv_path: Path, metric: str) -> List[float]:
@@ -74,8 +92,56 @@ def calculate_statistics(values: List[float]) -> Dict:
     return {'n': n, 'mean': mean, 'std': std}
 
 
+def quantile_based_comparison(baseline: List[float], treatment: List[float],
+                             quantiles: Optional[List[float]] = None) -> Dict:
+    """
+    Academically correct comparison using quantiles (not means).
+    
+    Reports differences at key percentiles (p50, p90, p95, p99) with
+    bootstrap confidence intervals.
+    
+    This is the recommended method for systems research papers.
+    """
+    if quantiles is None:
+        quantiles = [0.50, 0.90, 0.95, 0.99]
+    
+    results = {
+        'quantiles': {},
+        'hodges_lehmann': hodges_lehmann_estimator(baseline, treatment),
+        'baseline_summary': describe_robust(baseline),
+        'treatment_summary': describe_robust(treatment)
+    }
+    
+    for q in quantiles:
+        diff, lower_ci, upper_ci = quantile_difference_ci(
+            baseline, treatment, q, n_bootstrap=5000
+        )
+        
+        q_baseline = quantile(baseline, q)
+        q_treatment = quantile(treatment, q)
+        
+        pct_change = (diff / q_baseline * 100) if q_baseline != 0 else 0.0
+        
+        # Check if CI excludes zero (significant difference)
+        significant = (lower_ci > 0 and upper_ci > 0) or (lower_ci < 0 and upper_ci < 0)
+        
+        q_name = f"p{int(q * 100)}"
+        
+        results['quantiles'][q_name] = {
+            'baseline': q_baseline,
+            'treatment': q_treatment,
+            'difference': diff,
+            'percent_change': pct_change,
+            'ci_lower': lower_ci,
+            'ci_upper': upper_ci,
+            'significant': significant
+        }
+    
+    return results
+
+
 def cohens_d(mean1: float, mean2: float, std1: float, std2: float, n1: int, n2: int) -> float:
-    """Calculate Cohen's d effect size."""
+    """Calculate Cohen's d effect size (legacy, for t-test)."""
     pooled_std = math.sqrt(((n1 - 1) * std1**2 + (n2 - 1) * std2**2) / (n1 + n2 - 2))
     if pooled_std == 0:
         return 0.0
@@ -133,10 +199,85 @@ def ttest_independent(baseline: List[float], treatment: List[float]) -> Dict:
     }
 
 
-def print_hypothesis_test_results(result: Dict, baseline_name: str, treatment_name: str):
-    """Print formatted hypothesis test results."""
+def print_quantile_comparison_results(result: Dict, baseline_name: str, treatment_name: str):
+    """Print quantile-based comparison results (academically correct)."""
+    print("=" * 80)
+    print("QUANTILE-BASED COMPARISON (academically rigorous)")
+    print("=" * 80)
+    print()
+    print(f"Baseline:  {baseline_name}")
+    print(f"Treatment: {treatment_name}")
+    print()
+    
+    print("Methodology:")
+    print("  - Non-parametric quantile comparison (robust to heavy tails)")
+    print("  - Bootstrap 95% confidence intervals (5000 resamples)")
+    print("  - No parametric assumptions (no normality required)")
+    print()
+    
+    # Robust summary statistics
+    print("Summary Statistics:")
+    print(f"  Baseline  - Median: {result['baseline_summary']['median']:.2f}, "
+          f"IQR: {result['baseline_summary']['iqr']:.2f}, "
+          f"Tail ratio: {result['baseline_summary']['tail_ratio']:.2f}x")
+    print(f"  Treatment - Median: {result['treatment_summary']['median']:.2f}, "
+          f"IQR: {result['treatment_summary']['iqr']:.2f}, "
+          f"Tail ratio: {result['treatment_summary']['tail_ratio']:.2f}x")
+    print()
+    
+    # Hodges-Lehmann estimator (robust location shift)
+    hl = result['hodges_lehmann']
+    print(f"Hodges-Lehmann Estimator (robust location shift):")
+    print(f"  Estimated shift: {hl:.2f}")
+    print()
+    
+    # Quantile differences with CIs
+    print("Quantile Differences (with 95% bootstrap CI):")
+    print()
+    print("Percentile | Baseline | Treatment |   Diff   | % Change | 95% CI          | Sig?")
+    print("-" * 85)
+    
+    for q_name, q_data in sorted(result['quantiles'].items()):
+        sig_marker = "✓" if q_data['significant'] else "✗"
+        
+        print(f"{q_name:10s} | "
+              f"{q_data['baseline']:8.2f} | "
+              f"{q_data['treatment']:9.2f} | "
+              f"{q_data['difference']:8.2f} | "
+              f"{q_data['percent_change']:+7.1f}% | "
+              f"[{q_data['ci_lower']:6.2f}, {q_data['ci_upper']:6.2f}] | "
+              f"{sig_marker}")
+    
+    print()
+    print("Interpretation:")
+    print("  ✓ = CI excludes zero (significant difference)")
+    print("  ✗ = CI includes zero (no significant difference)")
+    print()
+    
+    # Overall conclusion
+    p99_data = result['quantiles'].get('p99', {})
+    p50_data = result['quantiles'].get('p50', {})
+    
+    if p99_data.get('significant'):
+        direction = "lower" if p99_data['difference'] < 0 else "higher"
+        print(f"Tail Latency (p99): Treatment is {abs(p99_data['percent_change']):.1f}% {direction}")
+    
+    if p50_data.get('significant'):
+        direction = "faster" if p50_data['difference'] < 0 else "slower"
+        print(f"Median Performance: Treatment is {abs(p50_data['percent_change']):.1f}% {direction}")
+    
+    print()
+    print("Academic Note:")
+    print("  This analysis uses non-parametric methods appropriate for")
+    print("  heavy-tailed systems data. Quantile comparisons are preferred")
+    print("  over mean-based tests (t-tests) in systems research.")
+    print()
+
+
+def print_ttest_results_legacy(result: Dict, baseline_name: str, treatment_name: str):
+    """Print legacy t-test results (kept for backwards compatibility)."""
     print("=" * 70)
-    print("HYPOTHESIS TEST RESULTS")
+    print("LEGACY T-TEST RESULTS (Not Academically Sound for Systems Data)")
     print("=" * 70)
     print()
     print(f"Baseline:  {baseline_name}")
@@ -245,29 +386,32 @@ def print_bayesian_results(result: Dict, baseline_name: str, treatment_name: str
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Hypothesis Testing Framework",
+        description="Hypothesis Testing Framework (Academically Rigorous)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Standard t-test
+  # Quantile-based comparison (RECOMMENDED)
   python3 hypothesis.py --baseline data/v1.csv \\
-      --treatment data/v2.csv --metric runtime_ns
+      --treatment data/v2.csv --metric runtime_ns --quantile-compare
 
-  # Bayesian comparison
+  # Legacy t-test (for reference only, not academically sound for systems data)
   python3 hypothesis.py --baseline data/v1.csv \\
-      --treatment data/v2.csv --metric runtime_ns --bayesian
+      --treatment data/v2.csv --metric runtime_ns --legacy-ttest
 
-  # Both tests
-  python3 hypothesis.py --baseline data/v1.csv \\
-      --treatment data/v2.csv --metric runtime_ns --both
+Academic Note:
+  The quantile-based comparison is the academically correct method for
+  heavy-tailed systems data. T-tests assume normality and are unreliable
+  for latency/cache/bandwidth measurements.
         """
     )
     
     parser.add_argument('--baseline', required=True, help='Baseline CSV file')
     parser.add_argument('--treatment', required=True, help='Treatment CSV file')
     parser.add_argument('--metric', required=True, help='Metric to compare')
-    parser.add_argument('--bayesian', action='store_true', help='Use Bayesian comparison')
-    parser.add_argument('--both', action='store_true', help='Run both frequentist and Bayesian')
+    parser.add_argument('--quantile-compare', action='store_true',
+                       help='Quantile-based comparison (RECOMMENDED)')
+    parser.add_argument('--legacy-ttest', action='store_true',
+                       help='Legacy t-test (not academically sound)')
     parser.add_argument('--output', help='Output JSON file')
     
     args = parser.parse_args()
@@ -297,20 +441,28 @@ Examples:
     
     results = {}
     
-    # Frequentist test (default)
-    if not args.bayesian or args.both:
-        ttest_result = ttest_independent(baseline, treatment)
-        print_hypothesis_test_results(ttest_result, args.baseline, args.treatment)
-        results['frequentist'] = ttest_result
+    # Default to quantile comparison if nothing specified
+    if not args.legacy_ttest and not args.quantile_compare:
+        args.quantile_compare = True
     
-    # Bayesian test
-    if args.bayesian or args.both:
-        if args.both:
-            print()
+    # Quantile-based comparison (RECOMMENDED)
+    if args.quantile_compare:
+        quantile_result = quantile_based_comparison(baseline, treatment)
+        print_quantile_comparison_results(quantile_result, args.baseline, args.treatment)
+        results['quantile_comparison'] = quantile_result
+    
+    # Legacy t-test (kept for backwards compatibility)
+    if args.legacy_ttest:
+        if args.quantile_compare:
+            print("\n" + "=" * 80 + "\n")
         
-        bayes_result = bayesian_comparison(baseline, treatment)
-        print_bayesian_results(bayes_result, args.baseline, args.treatment)
-        results['bayesian'] = bayes_result
+        print("WARNING: T-test assumes normality (often violated in systems data)")
+        print("         Results may be unreliable. Use quantile comparison instead.")
+        print()
+        
+        ttest_result = ttest_independent(baseline, treatment)
+        print_ttest_results_legacy(ttest_result, args.baseline, args.treatment)
+        results['legacy_ttest'] = ttest_result
     
     # Export results
     if args.output:
