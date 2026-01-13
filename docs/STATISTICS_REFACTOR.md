@@ -6,7 +6,7 @@ This refactoring addresses fundamental statistical issues in the Linux Reality C
 
 ## Key Problems Fixed
 
-### 1. ❌ Normal Distribution Assumptions → ✅ Non-Parametric Methods
+### 1. [WRONG] Normal Distribution Assumptions -> [OK] Non-Parametric Methods
 
 **Before:**
 - Used mean ± std
@@ -20,7 +20,7 @@ This refactoring addresses fundamental statistical issues in the Linux Reality C
 - Tukey fences (for flagging only, values retained)
 - Bootstrap confidence intervals
 
-### 2. ❌ Mean-Based Comparisons → ✅ Quantile-Based Comparisons
+### 2. [WRONG] Mean-Based Comparisons -> [OK] Quantile-Based Comparisons
 
 **Before:**
 - T-tests comparing means
@@ -33,7 +33,7 @@ This refactoring addresses fundamental statistical issues in the Linux Reality C
 - Bootstrap CIs on quantile differences
 - Estimation-focused (not p-value hunting)
 
-### 3. ❌ Outlier Removal → ✅ Outlier Retention
+### 3. [WRONG] Outlier Removal -> [OK] Outlier Retention
 
 **Before:**
 - Z-score > 3 = remove
@@ -45,7 +45,7 @@ This refactoring addresses fundamental statistical issues in the Linux Reality C
 - Explicitly noted as "meaningful tail behavior"
 - p99, p99.9 reported prominently
 
-### 4. ❌ Histograms/KDE → ✅ ECDF/Quantile Plots
+### 4. [WRONG] Histograms/KDE -> [OK] ECDF/Quantile Plots
 
 **Before:**
 - Histograms (arbitrary binning)
@@ -96,7 +96,7 @@ Comprehensive documentation:
 - Clear warnings about parametric assumptions
 
 ### 3. `analyze/outliers.py`
-Already used IQR method (Tukey fences) ✓
+Already used IQR method (Tukey fences) [OK]
 - Updated messaging to emphasize retention
 - Clarified that flagged values are investigated, not removed
 
@@ -158,12 +158,12 @@ print(f"p99 difference: {diff:.2f} ms [95% CI: {lower:.2f}, {upper:.2f}]")
 ## Academic Impact
 
 ### Before This Refactoring
-**Paper submission → Rejection**
+**Paper submission -> Rejection**
 
 > "The assumption of normality is violated, rendering the reported statistics unreliable. The authors use mean-based comparisons for heavy-tailed data and remove outliers without justification. Please revise using non-parametric methods."
 
 ### After This Refactoring
-**Paper submission → Acceptance**
+**Paper submission -> Acceptance**
 
 > "The statistical methodology is sound. The authors appropriately use non-parametric methods for heavy-tailed systems data and provide bootstrap confidence intervals on relevant quantiles."
 
@@ -174,15 +174,15 @@ All refactored modules have been tested:
 ```bash
 # Test robust_stats module
 python3 analyze/robust_stats.py
-✓ Module tests passed
+[OK] Module tests passed
 
 # Test distributions analysis
 python3 analyze/distributions.py data/cache_analysis.csv
-✓ Shows ECDF, median/IQR, tail ratios, flagged extremes
+[OK] Shows ECDF, median/IQR, tail ratios, flagged extremes
 
 # Test hypothesis testing
 python3 analyze/hypothesis.py --baseline data/v1.csv --treatment data/v2.csv --quantile-compare
-✓ Reports quantile differences with bootstrap CIs
+[OK] Reports quantile differences with bootstrap CIs
 ```
 
 ## Migration Guide
