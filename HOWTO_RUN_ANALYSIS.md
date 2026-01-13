@@ -1,6 +1,6 @@
 # How to Run the New Academic Statistics
 
-## 📊 Quick Start
+##  Quick Start
 
 ### 1. Text-Based Analysis (No Dependencies)
 
@@ -36,7 +36,7 @@ python3 analyze/hypothesis.py \
     --output plots/
 ```
 
-## 📁 Output
+##  Output
 
 Plots are saved in `plots/` directory:
 - `*_ecdf.png` - Empirical CDF (no binning)
@@ -46,7 +46,7 @@ Plots are saved in `plots/` directory:
 
 All plots are publication-quality (300 DPI, no normal overlays).
 
-## 🔍 Available Scripts
+##  Available Scripts
 
 ### Core Analysis
 
@@ -63,7 +63,7 @@ All plots are publication-quality (300 DPI, no normal overlays).
 | `plot_advanced.py` | Old plots | Has normal fits (not updated) |
 | `hypothesis_test.py` | Old hypothesis | Uses t-tests |
 
-## 📖 Examples
+##  Examples
 
 ### Example 1: Analyze Cache Hierarchy
 
@@ -110,27 +110,27 @@ done
 # Results in plots/ directory ready for LaTeX/papers
 ```
 
-## 🎯 Key Differences from Old Scripts
+##  Key Differences from Old Scripts
 
 ### Old Way (Wrong)
 ```bash
 # plot_advanced.py had:
-❌ Normal distribution overlays
-❌ KDE smoothing (hides tails)
-❌ Mean-based comparisons
-❌ Histograms (arbitrary bins)
+[WRONG] Normal distribution overlays
+[WRONG] KDE smoothing (hides tails)
+[WRONG] Mean-based comparisons
+[WRONG] Histograms (arbitrary bins)
 ```
 
 ### New Way (Correct)
 ```bash
 # plot_robust.py has:
-✅ ECDF (no assumptions)
-✅ Quantile plots (p50-p99)
-✅ Tukey boxplots (robust)
-✅ Tail ratio visualization
+[OK] ECDF (no assumptions)
+[OK] Quantile plots (p50-p99)
+[OK] Tukey boxplots (robust)
+[OK] Tail ratio visualization
 ```
 
-## 🐛 Troubleshooting
+##  Troubleshooting
 
 ### "KeyError: 'workload_ns'"
 Check your CSV columns:
@@ -153,13 +153,13 @@ Specify the grouping column:
 --group-by condition      # Group by condition
 ```
 
-## 📚 Documentation
+##  Documentation
 
 - **Methodology**: `docs/ACADEMIC_STATISTICS.md`
 - **Quick Reference**: `docs/STATISTICS_QUICKREF.md`
 - **Implementation**: `docs/STATISTICS_REFACTOR.md`
 
-## 🚀 For Papers
+##  For Papers
 
 Use the generated plots directly in your LaTeX:
 
@@ -171,4 +171,4 @@ Use the generated plots directly in your LaTeX:
 \end{figure}
 ```
 
-The plots are academically sound and will pass peer review! ✓
+The plots are academically sound and will pass peer review! [OK]
