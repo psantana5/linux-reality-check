@@ -64,6 +64,48 @@ def detect_throttling(runs: List[Metrics], window_size: int = 3) -> Tuple[bool, 
     return (has_throttling, degradation_pct)
 
 
+def detect_change_point(runs: List[Metrics], min_segment_size: int = 5) -> Tuple[bool, int]:
+    """
+    Simple change-point detection using median difference.
+    
+    Looks for a point where the distribution changes significantly.
+    More appropriate than trend fitting for regime-based behavior.
+    
+    Returns:
+        (has_change_point, change_index)
+    """
+    if len(runs) < min_segment_size * 2:
+        return (False, -1)
+    
+    runtimes = [r.runtime_ms for r in runs]
+    n = len(runtimes)
+    
+    # Try each potential split point
+    best_split = -1
+    max_difference = 0.0
+    
+    for split in range(min_segment_size, n - min_segment_size):
+        segment1 = runtimes[:split]
+        segment2 = runtimes[split:]
+        
+        median1 = statistics.median(segment1)
+        median2 = statistics.median(segment2)
+        
+        # Normalized difference
+        avg_median = (median1 + median2) / 2
+        if avg_median > 0:
+            diff = abs(median1 - median2) / avg_median
+            
+            if diff > max_difference:
+                max_difference = diff
+                best_split = split
+    
+    # Significant change if difference > 10%
+    has_change = max_difference > 0.10
+    
+    return (has_change, best_split if has_change else -1)
+
+
 def detect_trend(runs: List[Metrics]) -> str:
     """
     Detect overall trend: increasing, decreasing, or stable.
@@ -157,24 +199,35 @@ def analyze_group(group: RunGroup) -> None:
     print(f"  Runtime pattern: {sparkline}")
     print(f"  Range: [{min(runtimes):.2f}, {max(runtimes):.2f}] ms")
     
+    # Change-point detection (regime-based, not trend-based)
+    has_change, change_idx = detect_change_point(group.runs)
+    if has_change:
+        before_median = statistics.median([r.runtime_ms for r in group.runs[:change_idx]])
+        after_median = statistics.median([r.runtime_ms for r in group.runs[change_idx:]])
+        change_pct = ((after_median - before_median) / before_median) * 100
+        print(f"  [WARNING] Regime change detected at run {change_idx}")
+        print(f"     Before: {before_median:.2f} ms (median)")
+        print(f"     After:  {after_median:.2f} ms (median, {change_pct:+.1f}%)")
+    
     # Warmup detection
     has_warmup, warmup_pct = detect_warmup(group.runs)
     if has_warmup:
-        print(f"  ⚠ Warmup effect detected: first runs {warmup_pct:+.1f}% slower")
+        print(f"  [WARNING] Warmup effect detected: first runs {warmup_pct:+.1f}% slower")
     
     # Throttling detection
     has_throttling, throttle_pct = detect_throttling(group.runs)
     if has_throttling:
-        print(f"  ⚠ Throttling detected: last runs {throttle_pct:+.1f}% slower")
+        print(f"  [WARNING] Throttling detected: last runs {throttle_pct:+.1f}% slower")
     
-    # Trend analysis
-    trend = detect_trend(group.runs)
-    if trend != "stable":
-        print(f"  → Trend: {trend}")
+    # Trend analysis (fallback if no change-point)
+    if not has_change:
+        trend = detect_trend(group.runs)
+        if trend != "stable":
+            print(f"  -> Trend: {trend}")
     
     # Periodicity
     if analyze_periodicity(group.runs):
-        print(f"  ⚠ Periodic pattern detected (alternating fast/slow)")
+        print(f"  [WARNING] Periodic pattern detected (alternating fast/slow)")
     
     # Context switch pattern
     ctxt_switches = [r.nonvoluntary_ctxt_switches for r in group.runs]
