@@ -35,7 +35,7 @@ This document explains the **academically rigorous** statistical methods used in
 
 ### 1. Distribution Summaries
 
-| ❌ Wrong (Parametric)        | ✅ Correct (Non-parametric) | Why                                    |
+| [WRONG] Wrong (Parametric)        | [OK] Correct (Non-parametric) | Why                                    |
 |------------------------------|-----------------------------|-----------------------------------------|
 | Mean                         | **Median**                  | Robust to outliers/heavy tails          |
 | Standard deviation           | **IQR** or **MAD**          | Doesn't explode with tail events        |
@@ -58,7 +58,7 @@ print(f"Tail ratio (p99/p50): {stats['tail_ratio']:.2f}x")
 
 ### 2. Outlier Handling
 
-| ❌ Wrong                              | ✅ Correct                                    |
+| [WRONG] Wrong                              | [OK] Correct                                    |
 |---------------------------------------|-----------------------------------------------|
 | Remove outliers (z-score > 3)         | **Retain outliers** (they are the problem!)   |
 | Treat tails as noise                  | **Report p99, p99.9** explicitly              |
@@ -80,7 +80,7 @@ print("NOTE: These are RETAINED as meaningful tail behavior")
 
 ### 3. Hypothesis Testing / Comparisons
 
-| ❌ Wrong (Parametric)              | ✅ Correct (Non-parametric)                   |
+| [WRONG] Wrong (Parametric)              | [OK] Correct (Non-parametric)                   |
 |------------------------------------|-----------------------------------------------|
 | Independent t-test                 | **Quantile differences** (p50, p90, p99)      |
 | Cohen's d (mean-based effect size) | **Hodges-Lehmann estimator**                  |
@@ -107,7 +107,7 @@ print(result['quantiles']['p99'])
 
 ### 4. Confidence Intervals
 
-| ❌ Wrong                     | ✅ Correct                                  |
+| [WRONG] Wrong                     | [OK] Correct                                  |
 |------------------------------|---------------------------------------------|
 | CI on mean (assuming normal) | **Bootstrap CI on median**                  |
 | CI on std                    | **Bootstrap CI on IQR**                     |
@@ -130,7 +130,7 @@ print(f"p99 latency: {p99:.2f} ms [95% CI: {lower:.2f}, {upper:.2f}]")
 
 ### 5. Time Series Analysis
 
-| ❌ Wrong                          | ✅ Correct                                  |
+| [WRONG] Wrong                          | [OK] Correct                                  |
 |-----------------------------------|---------------------------------------------|
 | Polynomial trend fitting          | **Change-point detection**                  |
 | Rolling mean/std                  | **Regime segmentation**                     |
@@ -138,9 +138,9 @@ print(f"p99 latency: {p99:.2f} ms [95% CI: {lower:.2f}, {upper:.2f}]")
 
 **Why?**  
 Systems performance doesn't have smooth trends—it has **regime changes**:
-- Cold start → warmed up
-- Low load → high load
-- Throttled → un-throttled
+- Cold start -> warmed up
+- Low load -> high load
+- Throttled -> un-throttled
 
 **Code Example:**
 ```python
@@ -182,15 +182,15 @@ if has_warmup:
 
 ### Never Use
 
-❌ Normal distribution overlays  
-❌ KDE with default bandwidth (hides tails)  
-❌ Mean ± std error bars (unstable for heavy tails)  
+[WRONG] Normal distribution overlays  
+[WRONG] KDE with default bandwidth (hides tails)  
+[WRONG] Mean ± std error bars (unstable for heavy tails)  
 
 ---
 
 ## How to Report Results in Papers
 
-### ❌ Wrong Way
+### [WRONG] Wrong Way
 ```
 "We measured mean latency of 10.5 ± 2.3 ms (mean ± std).
 T-test shows significant difference (p < 0.05).
@@ -202,7 +202,7 @@ We removed 5 outliers using z-score > 3."
 
 ---
 
-### ✅ Correct Way
+### [OK] Correct Way
 ```
 "We analyzed performance using non-parametric methods.
 Distributions are summarized via median and IQR:
@@ -217,7 +217,7 @@ meaningful tail behavior rather than outliers to be removed."
 ```
 
 **Reviewer response:**  
-*"Statistical methodology is sound."* ✓
+*"Statistical methodology is sound."* [OK]
 
 ---
 
@@ -332,10 +332,10 @@ python3 analyze/timeseries.py data/results.csv
 Systems performance data requires non-parametric methods. Using mean, std, normal fits, and t-tests is academically unsound and can lead to wrong conclusions.
 
 **This framework provides:**
-- ✅ Academically rigorous methods
-- ✅ Appropriate for heavy-tailed data
-- ✅ Accepted in peer-reviewed venues
-- ✅ Correct inference about tail behavior
+- [OK] Academically rigorous methods
+- [OK] Appropriate for heavy-tailed data
+- [OK] Accepted in peer-reviewed venues
+- [OK] Correct inference about tail behavior
 
 **Use it for:**
 - Academic papers
