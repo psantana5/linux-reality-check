@@ -1,4 +1,4 @@
-# Statistical Refactoring Complete ✓
+# Statistical Refactoring Complete [OK]
 
 ## Summary
 
@@ -6,7 +6,7 @@ Linux Reality Check now uses **academically rigorous non-parametric statistics**
 
 ## What Changed
 
-### ✅ Core Improvements
+### [OK] Core Improvements
 
 1. **New Module: `analyze/robust_stats.py`**
    - Complete non-parametric statistics library
@@ -69,7 +69,7 @@ print(f"p99: {p99:.2f} ms [95% CI: {lower:.2f}, {upper:.2f}]")
 
 ## Academic Impact
 
-### Before ❌
+### Before [WRONG]
 ```
 "We measured mean latency of 10.5 ± 2.3 ms.
 T-test shows p < 0.05.
@@ -78,7 +78,7 @@ We removed 5 outliers."
 
 **Reviewer:** "Normality assumption violated. Outlier removal unjustified. Reject."
 
-### After ✅
+### After [OK]
 ```
 "We analyzed performance using non-parametric methods.
 Median latency: 10.2 ms (IQR: 2.1 ms).
@@ -102,7 +102,7 @@ python3 test_robust_stats.py
 python3 analyze/distributions.py data/cache_analysis.csv
 ```
 
-All tests pass ✓
+All tests pass [OK]
 
 ## Key Principles
 
@@ -134,10 +134,10 @@ See `docs/ACADEMIC_STATISTICS.md` for complete list.
 
 ## Status
 
-✅ Core refactoring complete and tested  
-✅ Documentation written  
-✅ Integration tests pass  
-✅ Backward compatibility maintained  
+[OK] Core refactoring complete and tested  
+[OK] Documentation written  
+[OK] Integration tests pass  
+[OK] Backward compatibility maintained  
 
 ### Still TODO (Optional)
 
@@ -161,5 +161,5 @@ Systems performance data is heavy-tailed. Using parametric methods (mean, std, t
 
 ---
 
-**Status: Production Ready ✓**  
-**Academic Status: Peer-Review Ready ✓**
+**Status: Production Ready [OK]**  
+**Academic Status: Peer-Review Ready [OK]**
