@@ -20,6 +20,9 @@ try:
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     import numpy as np
+    import warnings
+    # Suppress tight_layout warnings (cosmetic, not critical)
+    warnings.filterwarnings('ignore', message='Tight layout not applied')
 except ImportError:
     print("Error: matplotlib required. Install with: pip3 install matplotlib numpy")
     sys.exit(1)
@@ -77,7 +80,8 @@ def plot_ecdf(data_dict: Dict[str, List[float]], output_path: Path, title: str =
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Saved ECDF plot: {output_path}")
+    plt.close(fig)
+    print(f"[OK] Saved ECDF plot: {output_path}")
 
 
 def plot_quantiles(data_dict: Dict[str, List[float]], output_path: Path, title: str = "Quantiles"):
@@ -111,7 +115,8 @@ def plot_quantiles(data_dict: Dict[str, List[float]], output_path: Path, title: 
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Saved quantile plot: {output_path}")
+    plt.close(fig)
+    print(f"[OK] Saved quantile plot: {output_path}")
 
 
 def plot_boxplot(data_dict: Dict[str, List[float]], output_path: Path, title: str = "Boxplot"):
@@ -143,7 +148,8 @@ def plot_boxplot(data_dict: Dict[str, List[float]], output_path: Path, title: st
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Saved boxplot: {output_path}")
+    plt.close(fig)
+    print(f"[OK] Saved boxplot: {output_path}")
 
 
 def plot_tail_ratio(data_dict: Dict[str, List[float]], output_path: Path, title: str = "Tail Heaviness"):
@@ -186,7 +192,8 @@ def plot_tail_ratio(data_dict: Dict[str, List[float]], output_path: Path, title:
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Saved tail ratio plot: {output_path}")
+    plt.close(fig)
+    print(f"[OK] Saved tail ratio plot: {output_path}")
 
 
 def generate_all_plots(csv_path: Path, metric: str, group_by: str, output_dir: Path):
@@ -221,7 +228,7 @@ def generate_all_plots(csv_path: Path, metric: str, group_by: str, output_dir: P
                     f"Tail Heaviness: {metric}")
     
     print()
-    print("✓ All plots generated successfully!")
+    print("[OK] All plots generated successfully!")
     print(f"  Output directory: {output_dir}")
 
 
