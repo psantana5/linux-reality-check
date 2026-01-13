@@ -4,7 +4,7 @@
 
 ### Distribution Summary
 
-| Statistic              | Parametric (❌)    | Non-Parametric (✅) | When to Use     |
+| Statistic              | Parametric ([WRONG])    | Non-Parametric ([OK]) | When to Use     |
 |------------------------|--------------------|---------------------|-----------------|
 | Central tendency       | Mean               | **Median**          | Always          |
 | Spread                 | Std deviation      | **IQR** or **MAD**  | Always          |
@@ -13,7 +13,7 @@
 
 ### Visualization
 
-| Plot Type              | Parametric (❌)         | Non-Parametric (✅)  | Purpose           |
+| Plot Type              | Parametric ([WRONG])         | Non-Parametric ([OK])  | Purpose           |
 |------------------------|-------------------------|---------------------|-------------------|
 | Distribution shape     | Histogram (bins!)       | **ECDF**            | See full data     |
 | Distribution density   | KDE (smoothing!)        | **Boxplot**         | Show quartiles    |
@@ -22,7 +22,7 @@
 
 ### Outliers
 
-| Approach               | Parametric (❌)              | Non-Parametric (✅)           |
+| Approach               | Parametric ([WRONG])              | Non-Parametric ([OK])           |
 |------------------------|------------------------------|------------------------------|
 | Detection              | Z-score > 3                  | **Tukey fences (IQR)**       |
 | Action                 | Remove                       | **Retain & report**          |
@@ -30,7 +30,7 @@
 
 ### Comparison (A/B Testing)
 
-| Method                 | Parametric (❌)              | Non-Parametric (✅)           |
+| Method                 | Parametric ([WRONG])              | Non-Parametric ([OK])           |
 |------------------------|------------------------------|------------------------------|
 | Test statistic         | T-test (means)               | **Quantile differences**     |
 | Effect size            | Cohen's d                    | **Hodges-Lehmann**           |
@@ -39,7 +39,7 @@
 
 ### Confidence Intervals
 
-| Parameter              | Parametric (❌)              | Non-Parametric (✅)           |
+| Parameter              | Parametric ([WRONG])              | Non-Parametric ([OK])           |
 |------------------------|------------------------------|------------------------------|
 | Mean                   | CI = mean ± t·SE             | **Bootstrap CI on median**   |
 | Variance               | Chi-squared based            | **Bootstrap CI on IQR**      |
@@ -86,7 +86,7 @@ shift = hodges_lehmann_estimator(baseline, treatment)
 
 ## When to Use What
 
-### ✅ Always Use Non-Parametric For:
+### [OK] Always Use Non-Parametric For:
 - Latency measurements
 - Cache miss counts
 - Bandwidth/throughput
@@ -95,12 +95,12 @@ shift = hodges_lehmann_estimator(baseline, treatment)
 - Small sample sizes
 - Unknown distributions
 
-### ❌ Parametric Might Be OK For:
+### [WRONG] Parametric Might Be OK For:
 - Extremely large samples (n > 10,000) where CLT applies
 - Data that is provably normal (rare in systems!)
 - Quick approximations (but note limitations)
 
-### 🤔 When In Doubt:
+###  When In Doubt:
 **Use non-parametric.** It's always safe.
 
 ---
@@ -109,21 +109,21 @@ shift = hodges_lehmann_estimator(baseline, treatment)
 
 If you see these, the analysis is probably wrong:
 
-❌ "We removed outliers using z-score > 3"  
-❌ "Mean latency ± standard deviation"  
-❌ "T-test shows p < 0.05"  
-❌ "Normal distribution overlay"  
-❌ "We assume normal distribution"  
-❌ "Histogram with arbitrary bins"  
+[WRONG] "We removed outliers using z-score > 3"  
+[WRONG] "Mean latency ± standard deviation"  
+[WRONG] "T-test shows p < 0.05"  
+[WRONG] "Normal distribution overlay"  
+[WRONG] "We assume normal distribution"  
+[WRONG] "Histogram with arbitrary bins"  
 
-✅ What you should see instead:
+[OK] What you should see instead:
 
-✅ "Median latency (IQR)"  
-✅ "p99 latency with bootstrap CI"  
-✅ "Quantile comparison at p50, p90, p99"  
-✅ "ECDF visualization"  
-✅ "Non-parametric methods (no distributional assumptions)"  
-✅ "Outliers retained as meaningful tail behavior"  
+[OK] "Median latency (IQR)"  
+[OK] "p99 latency with bootstrap CI"  
+[OK] "Quantile comparison at p50, p90, p99"  
+[OK] "ECDF visualization"  
+[OK] "Non-parametric methods (no distributional assumptions)"  
+[OK] "Outliers retained as meaningful tail behavior"  
 
 ---
 
@@ -131,45 +131,45 @@ If you see these, the analysis is probably wrong:
 
 ```
 Do you have systems performance data?
-├─ YES → Use non-parametric methods (this guide)
-└─ NO → Maybe parametric is OK (but still safer to use non-parametric)
+ YES -> Use non-parametric methods (this guide)
+ NO -> Maybe parametric is OK (but still safer to use non-parametric)
 
 Is your data heavy-tailed?
-├─ YES → Definitely non-parametric
-├─ NO → Are you sure? Check p99/p50 ratio
-└─ Don't know → Use non-parametric to be safe
+ YES -> Definitely non-parametric
+ NO -> Are you sure? Check p99/p50 ratio
+ Don't know -> Use non-parametric to be safe
 
 Do you care about tail latency (p99)?
-├─ YES → Non-parametric, report quantiles
-└─ NO → You should care (it matters for user experience)
+ YES -> Non-parametric, report quantiles
+ NO -> You should care (it matters for user experience)
 
 Are reviewers likely to question assumptions?
-├─ YES (academic paper) → Non-parametric mandatory
-├─ MAYBE (tech report) → Non-parametric recommended
-└─ NO (internal only) → Still use non-parametric (it's correct!)
+ YES (academic paper) -> Non-parametric mandatory
+ MAYBE (tech report) -> Non-parametric recommended
+ NO (internal only) -> Still use non-parametric (it's correct!)
 ```
 
 ---
 
 ## Common Mistakes to Avoid
 
-### ❌ Mistake 1: "My data looks normal"
+### [WRONG] Mistake 1: "My data looks normal"
 **Reality:** Visual inspection is unreliable. Tails often hidden in plots.  
 **Fix:** Always check tail ratio (p99/p50). If > 1.5x, use non-parametric.
 
-### ❌ Mistake 2: "I'll just remove outliers"
+### [WRONG] Mistake 2: "I'll just remove outliers"
 **Reality:** Outliers = the performance problem you're measuring.  
 **Fix:** Flag but retain. Report p99 explicitly.
 
-### ❌ Mistake 3: "T-test is standard"
+### [WRONG] Mistake 3: "T-test is standard"
 **Reality:** T-test assumes normality. Systems data violates this.  
 **Fix:** Use quantile differences with bootstrap CI.
 
-### ❌ Mistake 4: "Mean is easier to interpret"
+### [WRONG] Mistake 4: "Mean is easier to interpret"
 **Reality:** Mean is unstable in heavy tails.  
 **Fix:** Report median. It's more stable and interpretable.
 
-### ❌ Mistake 5: "I have a large sample"
+### [WRONG] Mistake 5: "I have a large sample"
 **Reality:** Large n doesn't fix non-normality for inference.  
 **Fix:** Use non-parametric. They scale to large n just fine.
 
