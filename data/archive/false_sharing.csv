@@ -1,9 +1,0 @@
-run,workload_type,timestamp_ns,runtime_ns,voluntary_ctxt_switches,nonvoluntary_ctxt_switches,minor_page_faults,major_page_faults,start_cpu,end_cpu,ns_per_op,max_thread_runtime
-0,false_sharing_1threads,25021341297037,14873296,0,0,0,0,-1,-1,1.49,14873296
-1,padded_1threads,25021356282697,1855973,0,0,0,0,-1,-1,0.19,1855973
-2,false_sharing_2threads,25021358212796,81004277,0,0,0,0,-1,-1,8.08,81004277
-3,padded_2threads,25021439386202,4697840,0,0,0,0,-1,-1,0.47,4697840
-4,false_sharing_4threads,25021444360585,52512580,0,0,0,0,-1,-1,5.19,52512580
-5,padded_4threads,25021497092811,4382129,0,0,0,0,-1,-1,0.43,4382129
-6,false_sharing_8threads,25021501846642,54996233,0,0,0,0,-1,-1,4.26,54996233
-7,padded_8threads,25021557050501,4665919,0,0,0,0,-1,-1,0.37,4665919
