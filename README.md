@@ -42,8 +42,11 @@ A research-grade, kernel-near Linux performance exploration tool that demonstrat
 | **[USER_GUIDE.md](USER_GUIDE.md)** | All users | 20 min | Complete reference |
 | **[DEPLOYMENT.md](DEPLOYMENT.md)** | Ops/admins | 15 min | Workflows & integration |
 | **[DEMO.md](DEMO.md)** | Presenters | 2 min | Demo script |
+| **[docs/ACADEMIC_STATISTICS.md](docs/ACADEMIC_STATISTICS.md)** | Researchers | 30 min | Statistical methodology |
+| **[docs/STATISTICS_QUICKREF.md](docs/STATISTICS_QUICKREF.md)** | Analysts | 5 min | Robust stats cheat sheet |
 
-**New user? Start with [QUICKSTART.md](QUICKSTART.md)**
+**New user?** Start with [QUICKSTART.md](QUICKSTART.md)  
+**Writing a paper?** Read [ACADEMIC_STATISTICS.md](docs/ACADEMIC_STATISTICS.md)
 
 ---
 
